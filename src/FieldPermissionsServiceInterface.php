@@ -7,8 +7,10 @@
 
 namespace Drupal\field_permissions;
 
+use Drupal\Core\Field\FieldDefinitionInterface;
+use Drupal\Core\Field\FieldItemListInterface;
+use Drupal\Core\Session\AccountInterface;
 use Drupal\field\FieldStorageConfigInterface;
-
 
 interface FieldPermissionsServiceInterface {
 
@@ -21,6 +23,11 @@ interface FieldPermissionsServiceInterface {
    *   instance labels.
    */
   public static function getList($field_label = '');
+
+  /**
+   * {@inheritdoc}
+   */
+  public static function getFieldAccess($operation, FieldItemListInterface $items, AccountInterface $account, FieldDefinitionInterface $field_definition);
 
   /**
    * Returns field permissions in format suitable for use in hook_permission.
@@ -39,7 +46,7 @@ interface FieldPermissionsServiceInterface {
    * @param \Drupal\field\FieldStorageConfigInterface $field
    *   The field to return permissions for.
    */
-  public function getPermissionValue(FieldStorageConfigInterface $field);
+  public static function getPermissionValue(FieldStorageConfigInterface $field);
 
   /**
    * Returns permissions.
@@ -49,11 +56,12 @@ interface FieldPermissionsServiceInterface {
   /**
    * {@inheritdoc}
    */
-  public function fieldGetPermissionType(FieldStorageConfigInterface $field);
+  public static function fieldGetPermissionType(FieldStorageConfigInterface $field);
 
   /**
-   * {@inheritdoc}
+   * @param String $field_name
+   * @return mixed
    */
-  public function getFieldAccess($operation, $items, AccountInterface $account, $field_definition);
+  public function fieldGetPermissionTypeByName($field_name);
 
 }

@@ -5,7 +5,6 @@
  * Contains field_permissions.module.
  */
 
-use Drupal\Core\Routing\RouteMatchInterface;
 use Drupal\Core\Access\AccessResult;
 use Drupal\Core\Field\FieldDefinitionInterface;
 use Drupal\Core\Field\FieldItemListInterface;
@@ -31,28 +30,15 @@ define('FIELD_PERMISSIONS_PRIVATE', 1);
  */
 define('FIELD_PERMISSIONS_CUSTOM', 2);
 
-
-/**
- * Implements hook_help().
- */
-function field_permissions_help($route_name, RouteMatchInterface $route_match) {
-  switch ($route_name) {
-    // Main module help for the test module.
-    case 'help.page.test':
-      $output = '';
-      $output .= '<h3>' . t('About') . '</h3>';
-      $output .= '<p>' . t('test') . '</p>';
-      return $output;
-
-    default:
-  }
-}
-
 /**
  * Implements hook_entity_field_access().
+ *
+ * @inheritdoc
  */
 function field_permissions_entity_field_access($operation, FieldDefinitionInterface $field_definition, AccountInterface $account, FieldItemListInterface $items = NULL) {
-  if (!$field_definition->isDisplayConfigurable() || empty($items)) {
+  if ((!$field_definition->isDisplayConfigurable('view')
+      && !$field_definition->isDisplayConfigurable('form'))
+    || empty($items)) {
     return AccessResult::neutral();
   }
   $access_field = FieldPermissionsService::getFieldAccess($operation, $items, $account, $field_definition);
@@ -64,11 +50,14 @@ function field_permissions_entity_field_access($operation, FieldDefinitionInterf
 
 /**
  * Implements hook_form_alter().
+ *
+ * @inheritdoc
  */
 function field_permissions_form_field_config_edit_form_alter(&$form, \Drupal\Core\Form\FormStateInterface $form_state, $form_id) {
-
+  /** @var Drupal\field\Entity\FieldConfig $field */
   $field = $form_state->getBuildInfo()['callback_object']->getEntity();
-  $default_type = FieldPermissionsService::fieldGetPermissionType($field);
+  $field_storage = $field->getFieldStorageDefinition();
+  $default_type = FieldPermissionsService::fieldGetPermissionType($field_storage);
   $form['fid'] = array('#type' => 'hidden', '#value' => $field->id());
   $form['field']['field_permissions'] = array(
     '#weight' => -10,
@@ -83,12 +72,14 @@ function field_permissions_form_field_config_edit_form_alter(&$form, \Drupal\Cor
     ),
     '#default_value' => isset($form['#field']['field_permissions']['type']) ? $form['#field']['field_permissions']['type'] : $default_type,
   );
-  $form['field_permissions']['permissions'] = field_permissions_permissions_matrix($field);
+  $form['field_permissions']['permissions'] = field_permissions_permissions_matrix($field_storage);
   $form['actions']['submit']['#submit'][] = 'field_permission_field_config_edit_form_submit';
 }
 
 /**
  * Implements hook_form_alter().
+ *
+ * @inheritdoc
  */
 function field_permissions_permissions_matrix(\Drupal\field\Entity\FieldStorageConfig $field) {
   $roles = user_roles();
@@ -98,7 +89,8 @@ function field_permissions_permissions_matrix(\Drupal\field\Entity\FieldStorageC
     '#value' => $role_names,
   );
   $label = $field->getName();
-  $permissions = \Drupal::service('field_permissions.permissions_service')->listFieldPermissionSupport($field, $label);
+  $permissions = \Drupal::service('field_permissions.permissions_service')
+    ->listFieldPermissionSupport($field, $label);
   $options = array_keys($permissions);
   /*header theme table */
   $form['permissions'] = array(
@@ -114,11 +106,18 @@ function field_permissions_permissions_matrix(\Drupal\field\Entity\FieldStorageC
       'class' => array('checkbox'),
     );
   }
-  $test = FieldPermissionsService::GetPermissionValue();
+  $test = FieldPermissionsService::getPermissionValue($field);
   foreach ($permissions as $provider => $permission) {
     $form['permissions'][$provider]['description'] = array(
       '#type' => 'inline_template',
-      '#template' => '<div class="permission"><span class="title">{{ title }}</span>{% if description or warning %}<div class="description">{% if warning %}<em class="permission-warning">{{ warning }}</em> {% endif %}{{ description }}</div>{% endif %}</div>',
+      '#template' => '<div class="permission">
+<span class="title">{{ title }}</span>
+{% if description or warning %}
+<div class="description">
+{% if warning %}<em class="permission-warning">{{ warning }}</em> {% endif %}
+{{ description }}
+</div>{% endif %}
+</div>',
       '#context' => array(
         'title' => $permission["title"],
       ),
@@ -133,7 +132,12 @@ function field_permissions_permissions_matrix(\Drupal\field\Entity\FieldStorageC
         ),
         '#type' => 'checkbox',
         '#default_value' => in_array($provider, $test[$name]) ? 1 : 0,
-        '#attributes' => array('class' => array('rid-' . $rid, 'js-rid-' . $rid)),
+        '#attributes' => array(
+          'class' => array(
+            'rid-' . $rid,
+            'js-rid-' . $rid
+          )
+        ),
       );
     }
   }
@@ -141,13 +145,18 @@ function field_permissions_permissions_matrix(\Drupal\field\Entity\FieldStorageC
 }
 
 /**
- * Implements hook_form_submit().
+ * Submit callback for form.
+ *
+ * @inheritdoc
  */
 function field_permission_field_config_edit_form_submit(array &$form, FormStateInterface $form_state) {
-  $config = \Drupal::service('config.factory')->getEditable('field_permissions.field.settings');
+  /** @var \Drupal\Core\Config\Config $config */
+  $config = \Drupal::service('config.factory')
+    ->getEditable('field_permissions.field.settings');
+  /** @var Drupal\field\Entity\FieldConfig $field */
   $field = $form_state->getBuildInfo()['callback_object']->getEntity();
-  $custum_permissions = $form_state->getValue("permissions");
-  $roules = $form_state->getValue("role_names");
+  $custom_permissions = $form_state->getValue("permissions");
+  $roles = $form_state->getValue("role_names");
   $type_permission = $form_state->getValue("type");
   $field_name = $field->getName();
 
@@ -157,15 +166,15 @@ function field_permission_field_config_edit_form_submit(array &$form, FormStateI
   $perm_settings = [];
   // Set all perm.
   if ($type_permission == FIELD_PERMISSIONS_CUSTOM) {
-    foreach ($custum_permissions as $perm_name => $field_perm) {
+    foreach ($custom_permissions as $perm_name => $field_perm) {
       foreach ($field_perm as $rid => $roule_perm) {
-        $roule_name = $roules[$rid];
-        $perm_settings[$roule_name][$perm_name] = $roule_perm;
+        $role_name = $roles[$rid];
+        $perm_settings[$role_name][$perm_name] = $roule_perm;
       }
     }
   }
   elseif ($type_permission == FIELD_PERMISSIONS_PUBLIC) {
-    foreach ($custum_permissions as $perm_name => $field_perm) {
+    foreach ($custom_permissions as $perm_name => $field_perm) {
       foreach ($field_perm as $rid => $roule_perm) {
         if ($perm_name != 'view_' . $field_name) {
           $roule_perm = 0;
@@ -173,13 +182,13 @@ function field_permission_field_config_edit_form_submit(array &$form, FormStateI
         else {
           $roule_perm = 1;
         }
-        $roule_name = $roules[$rid];
-        $perm_settings[$roule_name][$perm_name] = $roule_perm;
+        $role_name = $roles[$rid];
+        $perm_settings[$role_name][$perm_name] = $roule_perm;
       }
     }
   }
   elseif ($type_permission == FIELD_PERMISSIONS_PRIVATE) {
-    foreach ($custum_permissions as $perm_name => $field_perm) {
+    foreach ($custom_permissions as $perm_name => $field_perm) {
       foreach ($field_perm as $rid => $roule_perm) {
         if ($perm_name != 'view_own_' . $field_name && $perm_name != 'edit_own_' . $field_name) {
           $roule_perm = 0;
@@ -187,12 +196,12 @@ function field_permission_field_config_edit_form_submit(array &$form, FormStateI
         else {
           $roule_perm = 1;
         }
-        $roule_name = $roules[$rid];
-        $perm_settings[$roule_name][$perm_name] = $roule_perm;
+        $role_name = $roles[$rid];
+        $perm_settings[$role_name][$perm_name] = $roule_perm;
       }
     }
   }
-  foreach ($perm_settings as $roule_name => $perm) {
-    user_role_change_permissions($roule_name, $perm);
+  foreach ($perm_settings as $role_name => $perm) {
+    user_role_change_permissions($role_name, $perm);
   }
 }
