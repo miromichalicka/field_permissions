@@ -93,11 +93,59 @@ class FieldPermissionsService implements FieldPermissionsServiceInterface {
   /**
    * {@inheritdoc}
    */
+  public static function getPermissionValue(FieldStorageConfigInterface $field) {
+    $roles = user_roles();
+    $field_field_permissions = [];
+    $field_permission_perm = FieldPermissionsService::permissions();
+    foreach ($roles as $role_name => $role) {
+      /** @var \Drupal\user\RoleInterface $role */
+      $role_perms = $role->getPermissions();
+      $field_field_permissions[$role_name] = [];
+      // For all element set admin permission.
+      if ($role->isAdmin()) {
+        foreach (array_keys($field_permission_perm) as $perm_name) {
+          $field_field_permissions[$role_name][] = $perm_name;
+        }
+      }
+      else {
+        foreach ($role_perms as $key => $role_perm) {
+          if (in_array($role_perm, array_keys($field_permission_perm))) {
+            $field_field_permissions[$role_name][] = $role_perm;
+          }
+        }
+      }
+    }
+    return $field_field_permissions;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function permissions() {
+    $permissions = [];
+    $instances = \Drupal::entityTypeManager()
+      ->getStorage('field_storage_config')
+      ->loadMultiple();
+    foreach ($instances as $key => $instance) {
+      $field_name = $instance->label();
+      $permission_list = FieldPermissionsService::getList($field_name);
+      $perms_name = array_keys($permission_list);
+      foreach ($perms_name as $perm_name) {
+        $name = str_replace(' ', '_', $perm_name) . '_' . $field_name;
+        $permissions[$name] = $permission_list[$perm_name];
+      }
+    }
+    return $permissions;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
   public function listFieldPermissionSupport(FieldStorageConfigInterface $field, $label = '') {
     $permissions = array();
     $permission_list = FieldPermissionsService::getList($label);
     foreach ($permission_list as $permission_type => $permission_info) {
-      $permission = str_replace(' ', '_', $permission_type) . '_' . $field->getName();
+      $permission = str_replace(' ', '_', $permission_type) . '_' . $field->label();
       $permissions[$permission] = array(
         'title' => $permission_info['title'],
         'description' => $permission_info['label'],
@@ -139,54 +187,6 @@ class FieldPermissionsService implements FieldPermissionsServiceInterface {
         'title' => t("View anyone's value for field @field", array('@field' => $field_label)),
       ),
     );
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public static function getPermissionValue(FieldStorageConfigInterface $field) {
-    $roles = user_roles();
-    $field_field_permissions = [];
-    $field_permission_perm = FieldPermissionsService::permissions();
-    foreach ($roles as $rule_name => $role) {
-      /** @var \Drupal\user\RoleInterface $role */
-      $role_perms = $role->getPermissions();
-      $field_field_permissions[$rule_name] = [];
-      // For all element set admin permission.
-      if ($role->isAdmin()) {
-        foreach (array_keys($field_permission_perm) as $perm_name) {
-          $field_field_permissions[$rule_name][] = $perm_name;
-        }
-      }
-      else {
-        foreach ($role_perms as $key => $role_perm) {
-          if (in_array($role_perm, array_keys($field_permission_perm))) {
-            $field_field_permissions[$rule_name][] = $role_perm;
-          }
-        }
-      }
-    }
-    return $field_field_permissions;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function permissions() {
-    $permissions = [];
-    $instances = \Drupal::entityTypeManager()
-      ->getStorage('field_storage_config')
-      ->loadMultiple();
-    foreach ($instances as $key => $instance) {
-      $field_name = $instance->label();
-      $permission_list = FieldPermissionsService::getList($field_name);
-      $perms_name = array_keys($permission_list);
-      foreach ($perms_name as $perm_name) {
-        $name = str_replace(' ', '_', $perm_name) . '_' . $field_name;
-        $permissions[$name] = $permission_list[$perm_name];
-      }
-    }
-    return $permissions;
   }
 
 }
