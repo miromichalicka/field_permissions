@@ -20,6 +20,7 @@ class FieldPermissionsService implements FieldPermissionsServiceInterface {
    */
   public static function getFieldAccess($operation, FieldItemListInterface $items, AccountInterface $account, FieldDefinitionInterface $field_definition) {
     $field_name = $field_definition->getName();
+    $field_label = $field_definition->getTargetEntityTypeId() . '.' . $field_name;
     $default_type = self::fieldGetPermissionTypeByName($field_name);
     if (in_array("administrator", $account->getRoles()) || $default_type == FIELD_PERMISSIONS_PUBLIC) {
       return TRUE;
@@ -28,7 +29,7 @@ class FieldPermissionsService implements FieldPermissionsServiceInterface {
       if ($default_type == FIELD_PERMISSIONS_PRIVATE) {
         if ($operation === "view") {
           if ($items->getEntity()->getOwnerId() == $account->id()) {
-            return $account->hasPermission($operation . "_own_" . $field_name);
+            return $account->hasPermission($operation . "_own_" . $field_label);
           }
           else {
             return FALSE;
@@ -36,10 +37,10 @@ class FieldPermissionsService implements FieldPermissionsServiceInterface {
         }
         elseif ($operation === "edit") {
           if ($items->getEntity()->isNew()) {
-            return $account->hasPermission("create_" . $field_name);
+            return $account->hasPermission("create_" . $field_label);
           }
           elseif ($items->getEntity()->getOwnerId() == $account->id()) {
-            return $account->hasPermission($operation . "_own_" . $field_name);
+            return $account->hasPermission($operation . "_own_" . $field_label);
           }
           else {
             return FALSE;
@@ -48,22 +49,22 @@ class FieldPermissionsService implements FieldPermissionsServiceInterface {
       }
       if ($default_type == FIELD_PERMISSIONS_CUSTOM) {
         if ($operation === "view") {
-          if ($account->hasPermission($operation . "_" . $field_name)) {
-            return $account->hasPermission($operation . "_" . $field_name);
+          if ($account->hasPermission($operation . "_" . $field_label)) {
+            return $account->hasPermission($operation . "_" . $field_label);
           }
           elseif ($items->getEntity()->getOwnerId() == $account->id()) {
-            return $account->hasPermission($operation . "_own_" . $field_name);
+            return $account->hasPermission($operation . "_own_" . $field_label);
           }
         }
         elseif ($operation === "edit") {
           if ($items->getEntity()->isNew()) {
-            return $account->hasPermission("create_" . $field_name);
+            return $account->hasPermission("create_" . $field_label);
           }
-          if ($account->hasPermission($operation . "_" . $field_name)) {
-            return $account->hasPermission($operation . "_" . $field_name);
+          if ($account->hasPermission($operation . "_" . $field_label)) {
+            return $account->hasPermission($operation . "_" . $field_label);
           }
           elseif ($items->getEntity()->getOwnerId() == $account->id()) {
-            return $account->hasPermission($operation . "_own_" . $field_name);
+            return $account->hasPermission($operation . "_own_" . $field_label);
           }
         }
       }
